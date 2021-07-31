@@ -89,15 +89,22 @@ export class HogService {
 
     public foodServeProcess = async () => {
         const {data: foodList} = await this.getInventory(HogService.buildFoodList())
-        if (!foodList.itemlist && await this.doBuyFood(HogService.BURGER_ID)) {
-            logSuccess("By food SUCCESS")
+        // if (!foodList.itemlist && await this.doBuyFood(HogService.BURGER_ID)) {
+        //     logSuccess("By food SUCCESS")
+        //     return;
+        // }
+
+        const notFoundBurger = !foodList.itemlist.some(item => item.Itemid === HogService.BURGER_ID)
+        if(notFoundBurger && await this.doBuyFood(HogService.BURGER_ID)){
+            logSuccess("By Burger SUCCESS");
             return;
         }
+
 
         const itemBurger = foodList.itemlist.find(item => item.Itemid === HogService.BURGER_ID)
         if (!itemBurger) {
             logError("Not found burger")
-            return
+            return;
         }
 
         const foodSuccess = await this.useItem(HogService.buildItemUse(itemBurger.InventoryId))
