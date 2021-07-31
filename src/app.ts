@@ -19,7 +19,7 @@ cron.schedule('* * * * *', async () => {
         if (hog.isUndefinedToken) {
             await renewToken();
         }
-        await hog.doRaisePigs(env.end_point);
+        await hog.doRaisePigs(env.user_id);
 
     } catch (e) {
         // console.log("Exception", e)
