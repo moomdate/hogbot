@@ -2,6 +2,7 @@ import axios, {AxiosResponse} from 'axios';
 import qs from 'qs';
 import {FarmInfoModel, Inventory, Marketlist, ResponseMarket, ResponseToken} from "../models/response.model";
 import {env} from "../config/env.config";
+import {logError, logInfo, logSuccess} from "../Utils/log";
 
 
 export class HogService {
@@ -50,22 +51,58 @@ export class HogService {
         })
     };
 
+    public doRaisePigs = async (userId: string) => {
+        const {data} = await this.getFarmInfo(userId);
+
+        const pigIsHungry = data.pigs_list.some(pig => pig.Pig_food);
+        const pigIsThirsty = data.pigs_list.some(pig => pig.Pig_water);
+        const pigIsDirty = data.fly;
+        const haveItemDrop = !!data.itemdrops_list.length;
+
+        if (pigIsHungry) {
+            logInfo("Pig -> is hungry")
+            await this.foodServeProcess()
+        }
+        if (pigIsThirsty) {
+            logInfo("Pig -> is Thirsty")
+            const watered = await this.useItem(HogService.buildItemWater())
+            if (watered) {
+                logSuccess("water [SUCCESS]")
+            }
+        }
+        if (pigIsDirty) {
+            logInfo("Pig -> is dirty")
+            const watered = await this.useItem(HogService.buildItemShower())
+            if (watered) {
+                logSuccess("Shower [SUCCESS]")
+            }
+        }
+        if (haveItemDrop) {
+            logInfo("Coin drop")
+            const take = await this.takeAllCoin();
+            if (take) {
+                logSuccess("Store ALL coin SUCCESS")
+            }
+        }
+    }
+
+
     public foodServeProcess = async () => {
         const {data: foodList} = await this.getInventory(HogService.buildFoodList())
-        if (!foodList.itemlist && await this.doBuyBurger()) {
-            console.log("By burger success")
+        if (!foodList.itemlist && await this.doBuyFood(HogService.BURGER_ID)) {
+            logSuccess("By food SUCCESS")
             return;
         }
 
         const itemBurger = foodList.itemlist.find(item => item.Itemid === HogService.BURGER_ID)
         if (!itemBurger) {
-            console.error("not found burger")
+            logError("Not found burger")
             return
         }
 
         const foodSuccess = await this.useItem(HogService.buildItemUse(itemBurger.InventoryId))
         if (foodSuccess) {
-            console.log("already fed SUCCESS.")
+            logSuccess("Already fed SUCCESS")
         }
         return foodSuccess;
     };
@@ -127,10 +164,10 @@ export class HogService {
     }
 
 
-    public async doBuyBurger() {
+    public async doBuyFood(itemID: number) {
         const {data: marketResponse} = await this.getMarket(HogService.buildMargetList())
-        const itemSlot2 = marketResponse.marketlist.filter(item => item.Slot === 2 && item.Level >= 1)
-        const burgerItem = HogService.findMaxId(itemSlot2);
+        const burgerItem = marketResponse.marketlist.find(item => item.ItemId === itemID)
+        // const burgerItem = HogService.findMaxId(itemSlot2);
         if (!burgerItem) {
             throw 'burger item not found.';
         }
