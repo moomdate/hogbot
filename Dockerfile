@@ -6,5 +6,4 @@ USER node
 RUN npm install
 COPY --chown=node:node . .
 RUN npm run build
-EXPOSE 8080
-CMD [ "node", "build/app.js" ]
+ENTRYPOINT npm start
