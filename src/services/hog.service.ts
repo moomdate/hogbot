@@ -2,7 +2,6 @@ import axios, {AxiosResponse} from 'axios';
 import qs from 'qs';
 import {FarmInfoModel, Inventory, Marketlist, ResponseMarket, ResponseToken} from "../models/response.model";
 import {env} from "../config/env.config";
-import e from "express";
 
 
 export class HogService {

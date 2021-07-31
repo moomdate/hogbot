@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 import express from 'express';
 import {HogService} from "./services/hog.service";
 import cron from 'node-cron'
-import dayjs from 'dayjs';
 
 dotenv.config({
     path: '.env'
