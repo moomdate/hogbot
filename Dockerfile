@@ -1,8 +1,9 @@
-FROM node:14.16.0-alpine3.13
-WORKDIR /app
-ENV PATH /app/node_modules/.bin:$PATH
+FROM node:10-alpine
+RUN mkdir -p /home/node/app/node_modules && chown -R node:node /home/node/app
+WORKDIR /home/node/app
 COPY package*.json ./
+USER node
 RUN npm install
 COPY --chown=node:node . .
-RUN chown app:app node_modules/
+RUN npm run build
 ENTRYPOINT npm start
