@@ -1,9 +1,8 @@
-FROM node:10-alpine
-RUN mkdir -p /home/node/app/node_modules && chown -R node:node /home/node/app
-WORKDIR /home/node/app
+FROM node:14.16.0-alpine3.13
+WORKDIR /app
+ENV PATH /app/node_modules/.bin:$PATH
 COPY package*.json ./
-USER node
 RUN npm install
 COPY --chown=node:node . .
-RUN npm run build
+#RUN npm run build
 ENTRYPOINT npm start
