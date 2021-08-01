@@ -25,5 +25,6 @@ jobs:
       - name: Build and push Docker images
         uses: docker/build-push-action@v2.2.2
         with:
+          platforms: linux/arm64
           push: true
           tags: docker.pkg.github.com/moomdate/hogbot/hogbot-img:1
