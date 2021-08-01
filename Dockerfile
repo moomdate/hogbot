@@ -4,5 +4,5 @@ ENV PATH /app/node_modules/.bin:$PATH
 COPY package*.json ./
 RUN npm install
 COPY --chown=node:node . .
-#RUN npm run build
+RUN chown app:app node_modules/
 ENTRYPOINT npm start
