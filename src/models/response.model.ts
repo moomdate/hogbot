@@ -103,3 +103,17 @@ export interface Inventory {
     itemlist: Itemlist[];
     powerbreed: Powerbreed;
 }
+
+export interface UserInfoResponse {
+    coins: number;
+    exp: number;
+    gems: number;
+    level: number;
+    maxexp: number;
+    pigcount: number;
+    point: number;
+    powerb: number;
+    tutorial: number;
+    userid: string;
+    wheels: number;
+}

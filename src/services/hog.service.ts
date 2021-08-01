@@ -1,18 +1,23 @@
-import axios, {AxiosResponse} from 'axios';
+import axios from 'axios';
 import qs from 'qs';
-import {FarmInfoModel, Inventory, Marketlist, ResponseMarket, ResponseToken} from "../models/response.model";
+import {
+    FarmInfoModel,
+    Inventory,
+    Marketlist,
+    ResponseMarket,
+    ResponseToken,
+    UserInfoResponse
+} from "../models/response.model";
 import {env} from "../config/env.config";
 import {logError, logInfo, logSuccess} from "../Utils/log";
+import {HappyHogData} from "../data/happyHogData";
+import dayjs from "dayjs";
 
 
 export class HogService {
 
     private cookie: string | undefined;
-    public static readonly BURGER_ID = 0;
-    public static readonly MILE_ID = 1;
-    public static readonly ICE_CREAM_ID = 1;
-    public static readonly LETTUCE_ID = 3;
-    public static readonly SALAD_ID = 4;
+    private userId: string | undefined;
 
 
     constructor(private cookieParam?: string) {
@@ -23,6 +28,10 @@ export class HogService {
 
     get isUndefinedToken() {
         return !this.cookie
+    }
+
+    set setUserId(userIdParam: string) {
+        this.userId = userIdParam
     }
 
     public getFarmInfo = async (userid: string) => {
@@ -51,14 +60,28 @@ export class HogService {
         })
     };
 
-    public doRaisePigs = async (userId: string) => {
-        const {data} = await this.getFarmInfo(userId);
+    public userInfo = async () => {
+        const config = {
+            url: `${env.end_point}/userinfo`,
+            headers: this.buildHeader(),
+        };
+        return axios.post<UserInfoResponse>(config.url, "", {
+            headers: config.headers
+        })
+    };
+
+    public doRaisePigs = async () => {
+        if (!this.userId)
+            throw Error('UserId not set.');
+
+        const {data} = await this.getFarmInfo(this.userId);
 
         const pigIsHungry = data.pigs_list.some(pig => pig.Pig_food);
         const pigIsThirsty = data.pigs_list.some(pig => pig.Pig_water);
         const pigIsDirty = data.fly;
         const haveItemDrop = !!data.itemdrops_list.length;
 
+        this.doReceiveItem();
         if (pigIsHungry) {
             logInfo("Pig -> is hungry")
             await this.foodServeProcess()
@@ -87,6 +110,23 @@ export class HogService {
     }
 
 
+    private doReceiveItem() {
+        const time = dayjs();
+        if (time.hour() === 6 && time.minute() === 30) {
+            (async () => {
+                logInfo(`H ${time.hour()} M ${time.minute()} `)
+                try {
+                    const re = await this.receiveDailyItem();
+                    if (re) {
+                        logSuccess("receive item Successfully")
+                    }
+                } catch (e) {
+                    logError('Can\'t receive daily item');
+                }
+            })()
+        }
+    }
+
     public foodServeProcess = async () => {
         const {data: foodList} = await this.getInventory(HogService.buildFoodList())
         // if (!foodList.itemlist && await this.doBuyFood(HogService.BURGER_ID)) {
@@ -94,14 +134,14 @@ export class HogService {
         //     return;
         // }
 
-        const notFoundBurger = !foodList.itemlist.some(item => item.Itemid === HogService.BURGER_ID)
-        if(notFoundBurger && await this.doBuyFood(HogService.BURGER_ID)){
+        const notFoundBurger = !foodList.itemlist.some(item => item.Itemid === HappyHogData.FOOD_BURGER_ID)
+        if (notFoundBurger && await this.doBuyFood(HappyHogData.FOOD_BURGER_ID)) {
             logSuccess("By Burger SUCCESS");
             return;
         }
 
 
-        const itemBurger = foodList.itemlist.find(item => item.Itemid === HogService.BURGER_ID)
+        const itemBurger = foodList.itemlist.find(item => item.Itemid === HappyHogData.FOOD_BURGER_ID)
         if (!itemBurger) {
             logError("Not found burger")
             return;
@@ -130,6 +170,19 @@ export class HogService {
             headers: this.buildHeader(),
         };
         return axios.post<Inventory>(config.url, jsonStr, {
+            headers: config.headers
+        })
+    };
+
+    public receiveDailyItem = async () => {
+        const jsonStr = qs.stringify({
+            type: 2,
+        });
+        const config = {
+            url: `${env.end_point}/daily/`,
+            headers: this.buildHeader(),
+        };
+        return axios.post(config.url, jsonStr, {
             headers: config.headers
         })
     };
@@ -176,9 +229,9 @@ export class HogService {
         const burgerItem = marketResponse.marketlist.find(item => item.ItemId === itemID)
         // const burgerItem = HogService.findMaxId(itemSlot2);
         if (!burgerItem) {
-            throw 'burger item not found.';
+            throw Error('burger item not found.');
         }
-        const {data: buyResponse} = await this.getMarket(HogService.buildBurger(1, burgerItem.StoreId))
+        const {data: buyResponse} = await this.getMarket(HogService.buildBurger(env.buy_amount, burgerItem.StoreId))
         return buyResponse;
     }
 
@@ -205,6 +258,18 @@ export class HogService {
         const {headers} = await this.doGetCookie(AccessToken);
         const [cookie] = headers['set-cookie'];
         return cookie;
+    };
+
+    public doLogin = async () => {
+        logInfo("=== DO LOGIN ===")
+        this.cookie = await this.doGenerateToken();
+        const {data: {userid}} = await this.userInfo();
+        if (userid) {
+            this.setUserId = userid;
+            logSuccess(`=== SET UID: ${userid} ===`)
+        } else {
+            throw Error('Not found user info');
+        }
     };
 
     private doGetCookie = async (accesstoken: string) => {
