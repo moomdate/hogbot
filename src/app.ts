@@ -5,20 +5,21 @@ import {env} from "./config/env.config";
 import {hogRare} from "./config/hog.config";
 import {HogData} from "./config/hog.data";
 import {ProcessAvailable} from "./models/response.model";
+import dayjs from "dayjs";
 
 
 let hog = new HogService();
 (async () => {
-    try{
+    try {
         await hog.doLogin();
-    }catch (e){
+    } catch (e) {
         logError("Token is invalid")
         throw new Error('Token is invalid');
     }
 })();
-console.log('cron -> ', env.cron)
+logInfo('cron -> ', env.cron, ' started')
 cron.schedule(env.cron, async () => {
-    logSuccess('- cron working...')
+    logSuccess('cron working...')
 
     async function renewToken() {
         logWarn('Renew token')
@@ -29,8 +30,14 @@ cron.schedule(env.cron, async () => {
         if (hog.isUndefinedToken) {
             await renewToken();
         }
-        await hog.doRaisePigs()
-        // await hog.pigProceed();
+        const {data: farmInfo} = await hog.getFarmInfo(hog.getUserId);
+        const dayjsTime = dayjs();
+        if (env.raise) {
+            await hog.doRaisePigs(farmInfo)
+        }
+        if (env.processed) {
+            await hog.pigProceed(farmInfo);
+        }
         // const find = farmInfo.pigs_list.find(pig=>pig.Pig_sex === 1 && pig.Pig_size === 1); // แม่พันธ์
 
     } catch (e) {

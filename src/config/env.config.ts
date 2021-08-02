@@ -22,6 +22,10 @@ export const env = load({
             type: Boolean,
             default: false
         },
+        raise: {
+            type: Boolean,
+            default: true
+        },
         weightToProcess: {
             type: Number,
             default: 200

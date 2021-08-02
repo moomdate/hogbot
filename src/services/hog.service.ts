@@ -10,7 +10,7 @@ import {
     UserInfoResponse, ProcessAvailableResponse, ProcessInProcessResponse, PigsList
 } from "../models/response.model";
 import {env} from "../config/env.config";
-import {groupBy, logError, logInfo, logSuccess} from "../Utils/log";
+import {groupBy, logError, logInfo, logSuccess, logWarn} from "../Utils/log";
 import {HogData} from "../config/hog.data";
 import dayjs from "dayjs";
 import {hogRare} from "../config/hog.config";
@@ -186,98 +186,103 @@ export class HogService {
         })
     };
 
-    public pigProceed = async () => {
-        const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
-        if (env.processed) {
-            const pigNotRare = farmInfo.pigs_list.filter(pig => !hogRare.includes(pig.Pig_id));
-            if (!pigNotRare.length) {
-                logInfo("Pig is rare all")
-                return;
+    public pigProceed = async (farmInfo: FarmInfoModel) => {
+
+        logInfo("Process 2 Work")
+        const pigNotRare = farmInfo.pigs_list.filter(pig => !hogRare.includes(pig.Pig_id));
+        if (!pigNotRare.length) {
+            logInfo("Pig is rare all")
+            return;
+        }
+
+        const pigPrepared = pigNotRare
+            .filter(pig => pig.Pig_size === 1)
+            .filter(pig => pig.Pig_weight >= env.weightToProcess)
+
+        if (!pigPrepared.length) {
+            logWarn("Pork is not ready to be processed.")
+            return;
+        }
+
+        const factoryMaxSize = HogData.factoryMaxSize(farmInfo.factory);
+        const {data: responseProcessObj} = await this.getProcessInProgress()
+        const {List: processInProgress} = responseProcessObj
+
+        const endProcessList = processInProgress.filter(pc => pc.Now > pc.End);
+        if (endProcessList.length) {
+            await this.doneProcessInProgress(endProcessList);
+            return;
+        }
+
+        const {data: processAvailableResp} = await this.getProcess()
+        const {List: processAvailable} = processAvailableResp;
+
+        logInfo(`Process in progress -> (${processInProgress.filter(r => !endProcessList.includes(r)).length})`)
+        if (processInProgress.length === factoryMaxSize) {
+            logWarn("Factory process is full");
+            return;
+        }
+
+        const processLevel = processAvailable.filter(p => p.Level === farmInfo.factory)
+        const selectedProcessId = Math.max.apply(Math, processLevel.map((o) => o.Id))
+        const selectedProcess = processLevel.find(p => p.Id === selectedProcessId);
+        if (!selectedProcess) {
+            logError('ไม่สามารถเลือกโรงแปรรูปได้')
+            return;
+        }
+
+        const {data: itemInBag} = await this.getInventory(HogService.buildGetItemInbag());
+        const {Item_1, Item_2, Item_1_amount, Item_2_amount} = selectedProcess;
+        const countItem1: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_1).length;
+        const countItem2: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_2).length;
+
+        // do process
+        const processSize = factoryMaxSize - processInProgress.length
+        logInfo(`Proceed available: (${pigPrepared.length})  process ->  (${processSize})`)
+        const grouped = groupBy(pigPrepared, 'Pig_id')
+        const keys = Object.keys(grouped);
+
+        for (let i = 0; i < processSize; i++) {
+            const picGroupList = grouped[keys[i]]
+            if (Item_1 && picGroupList.length * Item_1_amount > countItem1) {
+                logInfo('Buy item 1')
+                const bs1 = await this.doBuyItem(Item_1, (picGroupList.length * Item_1_amount) + 2, 3)
+                bs1 && logSuccess('Successfully purchased hair part 1')
             }
 
-            const pigPrepared = pigNotRare
-                .filter(pig => pig.Pig_size === 1)
-                .filter(pig => pig.Pig_weight >= env.weightToProcess)
-
-            if (!pigPrepared.length) {
-                logInfo("Pork is not ready to be processed.")
-                return;
+            if (Item_2 && picGroupList.length * Item_2_amount > countItem2) {
+                logInfo('Buy item 2')
+                const bs2 = await this.doBuyItem(Item_2, (picGroupList.length * Item_2_amount) + 2, 3)
+                bs2 && logSuccess('Successfully purchased hair part 2')
             }
-
-            const factoryMaxSize = HogData.factoryMaxSize(farmInfo.factory);
-            const {data: responseProcessObj} = await this.getProcessInProgress()
-            const {List: processInProgress} = responseProcessObj
-
-            logInfo(`Process in progress: ${processInProgress.length}`)
-            const endProcessList = processInProgress.filter(pc => pc.Now > pc.End);
-            if (endProcessList.length) {
-                console.log(` process is done -> ${endProcessList.length}`)
-                for (let process of endProcessList) {
-                    console.log(`processID-> ${process.Id}`)
-                    const end = await this.getProcessInProgress(HogService.buildProcessSuccess(process.Id))
-                    end && logSuccess(`Done process id -> ${process.Id} SUCCESS `)
-                }
-                return;
+            const {status} = await this.getProcessInProgress(HogService.buildDoProcess(selectedProcessId, picGroupList));
+            if (status === 200) {
+                logSuccess(`Process success ProcessID:${selectedProcessId} hog proceed amount:${picGroupList.length}`)
             }
+        }
 
-            const {data: processAvailableResp} = await this.getProcess()
-            const {List: processAvailable} = processAvailableResp;
+    }
 
-            console.log(`List in progress -> ${processInProgress.filter(r => !endProcessList.includes(r)).length}`)
-            if (processInProgress.length === factoryMaxSize) {
-                logInfo("Factory process is full");
-                return;
-            }
-
-            const processLevel = processAvailable.filter(p => p.Level === farmInfo.factory)
-            const selectedProcessId = Math.max.apply(Math, processLevel.map((o) => o.Id))
-            const selectedProcess = processLevel.find(p => p.Id === selectedProcessId);
-            if (!selectedProcess) {
-                logError('ไม่สามารถเลือกโรงแปรรูปได้')
-                return;
-            }
-            const {data: itemInBag} = await this.getInventory(HogService.buildGetItemInbag());
-            const {Item_1, Item_2, Item_1_amount, Item_2_amount} = selectedProcess;
-            const countItem1: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_1).length;
-            const countItem2: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_2).length;
-
-            // do process
-            const processSize = factoryMaxSize - processInProgress.length
-            logInfo(`Proceed available: (${pigPrepared.length})  process ->  (${processSize})`)
-            const grouped = groupBy(pigPrepared, 'Pig_id')
-            const keys = Object.keys(grouped);
-
-            for (let i = 0; i < processSize; i++) {
-                const picGroupList = grouped[keys[i]]
-                if (Item_1 && picGroupList.length * Item_1_amount > countItem1) {
-                    console.log('buy item 1')
-                    const bs1 = await this.doBuyItem(Item_1, (picGroupList.length * Item_1_amount) + 2, 3)
-                    bs1 && logSuccess('Successfully purchased hair part 1')
-                }
-
-                if (Item_2 && picGroupList.length * Item_2_amount > countItem2) {
-                    console.log('buy item 2')
-                    const bs2 = await this.doBuyItem(Item_2, (picGroupList.length * Item_2_amount) + 2, 3)
-                    bs2 && logSuccess('Successfully purchased hair part 2')
-                }
-                const {data} = await this.getProcessInProgress(HogService.buildDoProcess(selectedProcessId, picGroupList));
-                data && logSuccess(`Process success ProcessID:${selectedProcessId} hog amount:${picGroupList.length}`)
+    private async doneProcessInProgress(endProcessList: any) {
+        logInfo(`process done -> (${endProcessList.length})`)
+        for (let process of endProcessList) {
+            console.log(`processID-> ${process.Id}`)
+            const {status} = await this.getProcessInProgress(HogService.buildProcessSuccess(process.Id))
+            if (status === 200) {
+                logSuccess(`Done process id -> ${process.Id} SUCCESS `)
             }
         }
     }
+
     /**
      * ให้อาหาร ให้น้ำ เก็บเหรียญ ซื้อเบอร์เกอร์ อาบน้ำหมู
      */
-    public doRaisePigs = async () => {
-        if (!this.userId)
-            throw Error('UserId not set.');
-
-        const {data} = await this.getFarmInfo(this.userId);
-
-        const pigIsHungry = data.pigs_list.some(pig => pig.Pig_food);
-        const pigIsThirsty = data.pigs_list.some(pig => pig.Pig_water);
-        const pigIsDirty = data.fly;
-        const haveItemDrop = !!data.itemdrops_list.length;
+    public doRaisePigs = async (farmInfo: FarmInfoModel) => {
+        logInfo("Process 1 Work")
+        const pigIsHungry = farmInfo.pigs_list.some(pig => pig.Pig_food);
+        const pigIsThirsty = farmInfo.pigs_list.some(pig => pig.Pig_water);
+        const pigIsDirty = farmInfo.fly;
+        const haveItemDrop = !!farmInfo.itemdrops_list.length;
 
         this.doReceiveItem();
         if (pigIsHungry) {
@@ -393,20 +398,24 @@ export class HogService {
     };
 
     public async doBuyItem(itemID: number, amount: number, itemType?: number) {
-        const {data: marketResponse} = await this.getMarket();
-        const itemSelected = itemType ? marketResponse.marketlist.find(item => {
-            return item.ItemId === itemID && item.Itemtype == itemType;
-        }) : marketResponse.marketlist.find(item => {
-            return item.ItemId === itemID
-        })
-        // const burgerItem = HogService.findMaxId(itemSlot2);
-        if (!itemSelected) {
-            throw Error(`item not found ID -> ${itemID}`);
+        try {
+            const {data: marketResponse} = await this.getMarket();
+            const itemSelected = itemType ? marketResponse.marketlist.find(item => {
+                return item.ItemId === itemID && item.Itemtype == itemType;
+            }) : marketResponse.marketlist.find(item => {
+                return item.ItemId === itemID
+            })
+            if (!itemSelected) {
+                logError(`item not found ID -> ${itemID}`)
+                return;
+            }
+            const body = HogService.buildBuyItem(amount, itemSelected.StoreId)
+            const {data: buyResponse} = await this.getMarket(body)
+            return buyResponse;
+        } catch (e) {
+            logError(`buy item: Something went wrong -> ${e}`)
+            return undefined;
         }
-        const body = HogService.buildBuyItem(amount, itemSelected.StoreId)
-        logInfo(`buy item ${body}`)
-        const {data: buyResponse} = await this.getMarket(body)
-        return buyResponse;
     }
 
     public doGenerateToken = async () => {
