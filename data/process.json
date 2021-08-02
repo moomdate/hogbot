@@ -1,0 +1,108 @@
+{
+  "List": [
+    {
+      "Id": 1,
+      "Pigid": -1,
+      "Item_1": 19,
+      "Item_2": 0,
+      "Itemidresult": 3,
+      "Item_1_amount": 1,
+      "Item_2_amount": 0,
+      "Pig_price": 15,
+      "Process_time": 10,
+      "Process_exp": 100,
+      "Level": 1
+    },
+    {
+      "Id": 2,
+      "Pigid": -1,
+      "Item_1": 23,
+      "Item_2": 0,
+      "Itemidresult": 7,
+      "Item_1_amount": 1,
+      "Item_2_amount": 0,
+      "Pig_price": 17,
+      "Process_time": 30,
+      "Process_exp": 300,
+      "Level": 1
+    },
+    {
+      "Id": 3,
+      "Pigid": -1,
+      "Item_1": 22,
+      "Item_2": 0,
+      "Itemidresult": 6,
+      "Item_1_amount": 1,
+      "Item_2_amount": 0,
+      "Pig_price": 21,
+      "Process_time": 60,
+      "Process_exp": 600,
+      "Level": 2
+    },
+    {
+      "Id": 4,
+      "Pigid": -1,
+      "Item_1": 15,
+      "Item_2": 0,
+      "Itemidresult": 0,
+      "Item_1_amount": 1,
+      "Item_2_amount": 0,
+      "Pig_price": 29,
+      "Process_time": 120,
+      "Process_exp": 1200,
+      "Level": 2
+    },
+    {
+      "Id": 5,
+      "Pigid": -1,
+      "Item_1": 18,
+      "Item_2": 0,
+      "Itemidresult": 2,
+      "Item_1_amount": 1,
+      "Item_2_amount": 0,
+      "Pig_price": 45,
+      "Process_time": 240,
+      "Process_exp": 2400,
+      "Level": 3
+    },
+    {
+      "Id": 6,
+      "Pigid": -1,
+      "Item_1": 16,
+      "Item_2": 0,
+      "Itemidresult": 1,
+      "Item_1_amount": 1,
+      "Item_2_amount": 0,
+      "Pig_price": 77,
+      "Process_time": 480,
+      "Process_exp": 4800,
+      "Level": 3
+    },
+    {
+      "Id": 7,
+      "Pigid": -1,
+      "Item_1": 20,
+      "Item_2": 17,
+      "Itemidresult": 4,
+      "Item_1_amount": 1,
+      "Item_2_amount": 1,
+      "Pig_price": 141,
+      "Process_time": 480,
+      "Process_exp": 6000,
+      "Level": 4
+    },
+    {
+      "Id": 8,
+      "Pigid": -1,
+      "Item_1": 21,
+      "Item_2": 17,
+      "Itemidresult": 5,
+      "Item_1_amount": 1,
+      "Item_2_amount": 1,
+      "Pig_price": 141,
+      "Process_time": 480,
+      "Process_exp": 6000,
+      "Level": 4
+    }
+  ]
+}

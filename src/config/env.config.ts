@@ -1,9 +1,34 @@
 import {load} from 'ts-dotenv';
 
 export const env = load({
-        end_point: String,
+        end_point: {
+            type: String,
+            default: 'https://api-z.happy-hog.in.th'
+        },
         facebook_token: String,
-        buy_amount: Number,
-        cron: String
+        buy_amount: {
+            type: Number,
+            default: 1
+        },
+        cron: {
+            type: String,
+            default: '* * * * *'
+        },
+        growUpItem: {
+            type: Boolean,
+            default: false
+        },
+        processed: {
+            type: Boolean,
+            default: false
+        },
+        weightToProcess: {
+            type: Number,
+            default: 200
+        },
+        calve: {
+            type: Boolean,
+            default: false
+        }
     }
 );

@@ -1,23 +1,25 @@
 import axios from 'axios';
 import qs from 'qs';
 import {
+    BalanceResponse,
     FarmInfoModel,
     Inventory,
-    Marketlist,
+    Marketlist, ProcessInProcess, ProcessAvailable,
     ResponseMarket,
     ResponseToken,
-    UserInfoResponse
+    UserInfoResponse, ProcessAvailableResponse, ProcessInProcessResponse, PigsList
 } from "../models/response.model";
 import {env} from "../config/env.config";
-import {logError, logInfo, logSuccess} from "../Utils/log";
-import {HappyHogData} from "../data/happyHogData";
+import {groupBy, logError, logInfo, logSuccess} from "../Utils/log";
+import {HogData} from "../config/hog.data";
 import dayjs from "dayjs";
+import {hogRare} from "../config/hog.config";
 
 
 export class HogService {
 
-    private cookie: string | undefined;
-    private userId: string | undefined;
+    private cookie: string = '';
+    private userId: string = '';
 
 
     constructor(private cookieParam?: string) {
@@ -32,6 +34,67 @@ export class HogService {
 
     set setUserId(userIdParam: string) {
         this.userId = userIdParam
+    }
+
+    get getUserId() {
+        return this.userId
+    }
+
+    public static buildItemWater() {
+        return qs.stringify({
+            type: 2
+        });
+    }
+
+    public static buildItemShower() {
+        return qs.stringify({
+            type: 3
+        });
+    }
+
+    public static buildItemUse(invid: number) {
+        return qs.stringify({
+            type: 1,
+            invid
+        });
+    }
+
+    public static buildFoodList() {
+        return qs.stringify({
+            itemtypelist: "{\"TypeList\":[0]}"
+        });
+    }
+
+    public static buildGetItemInbag() {
+        return qs.stringify({
+            itemtypelist: "{\"TypeList\":[0,1,2,3,4,5]}"
+        });
+    }
+
+    public static findMaxId(itemList: Marketlist[]): Marketlist | undefined {
+        const storeId = Math.max.apply(Math, itemList.map(function (o) {
+            return o.StoreId;
+        }))
+        return itemList.find(i => i.StoreId === storeId);
+    }
+
+    public static buildBuyItem(burgerAmount: number, storeId: number) {
+        return qs.stringify({
+            type: 2,
+            storeId,
+            amount: burgerAmount,
+            buytype: 2
+        })
+    }
+
+    static buildMargetList() {
+        return qs.stringify({
+            type: 1
+        })
+    }
+
+    private static buildData(data: Object) {
+        return qs.stringify(data)
     }
 
     public getFarmInfo = async (userid: string) => {
@@ -60,6 +123,59 @@ export class HogService {
         })
     };
 
+    public getProcess = async () => {
+        const defaults = qs.stringify({
+            type: 1
+        })
+        const config = {
+            url: `${env.end_point}/process/`,
+            headers: this.buildHeader(),
+        };
+        return axios.post<ProcessAvailableResponse>(config.url, defaults, {
+            headers: config.headers
+        })
+    };
+
+    public getProcessInProgress = async (data?: string) => {
+        const config = {
+            url: `${env.end_point}/process/`,
+            headers: this.buildHeader(),
+        };
+        return axios.post<ProcessInProcessResponse>(config.url, data || HogService.buildProcessInProcess(), {
+            headers: config.headers
+        })
+    };
+
+    public static buildProcessInProcess() {
+        return qs.stringify({
+            type: 3
+        })
+    }
+
+    public static buildProcessAvailable() {
+        return qs.stringify({
+            type: 1
+        })
+    }
+
+    public static buildProcessSuccess(id: number) {
+        return qs.stringify({
+            type: 4,
+            Id: id
+        })
+    }
+
+    public static buildDoProcess(processId: number, pigList: PigsList[]) {
+        return qs.stringify({
+            type: 2,
+            Id: processId,
+            ListIdPig: `{"PigList":[${pigList.map(p => p.Id).join(',')}]`
+        }) + '%7D'
+    }
+
+    //{"PigList":[21819550]}
+
+
     public userInfo = async () => {
         const config = {
             url: `${env.end_point}/userinfo`,
@@ -70,6 +186,88 @@ export class HogService {
         })
     };
 
+    public pigProceed = async () => {
+        const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
+        if (env.processed) {
+            const pigNotRare = farmInfo.pigs_list.filter(pig => !hogRare.includes(pig.Pig_id));
+            if (!pigNotRare.length) {
+                logInfo("Pig is rare all")
+                return;
+            }
+
+            const pigPrepared = pigNotRare
+                .filter(pig => pig.Pig_size === 1)
+                .filter(pig => pig.Pig_weight >= env.weightToProcess)
+
+            if (!pigPrepared.length) {
+                logInfo("Pork is not ready to be processed.")
+                return;
+            }
+
+            const factoryMaxSize = HogData.factoryMaxSize(farmInfo.factory);
+            const {data: responseProcessObj} = await this.getProcessInProgress()
+            const {List: processInProgress} = responseProcessObj
+
+            logInfo(`Process in progress: ${processInProgress.length}`)
+            const endProcessList = processInProgress.filter(pc => pc.Now > pc.End);
+            if (endProcessList.length) {
+                console.log(` process is done -> ${endProcessList.length}`)
+                for (let process of endProcessList) {
+                    console.log(`processID-> ${process.Id}`)
+                    const end = await this.getProcessInProgress(HogService.buildProcessSuccess(process.Id))
+                    end && logSuccess(`Done process id -> ${process.Id} SUCCESS `)
+                }
+                return;
+            }
+
+            const {data: processAvailableResp} = await this.getProcess()
+            const {List: processAvailable} = processAvailableResp;
+
+            console.log(`List in progress -> ${processInProgress.filter(r => !endProcessList.includes(r)).length}`)
+            if (processInProgress.length === factoryMaxSize) {
+                logInfo("Factory process is full");
+                return;
+            }
+
+            const processLevel = processAvailable.filter(p => p.Level === farmInfo.factory)
+            const selectedProcessId = Math.max.apply(Math, processLevel.map((o) => o.Id))
+            const selectedProcess = processLevel.find(p => p.Id === selectedProcessId);
+            if (!selectedProcess) {
+                logError('ไม่สามารถเลือกโรงแปรรูปได้')
+                return;
+            }
+            const {data: itemInBag} = await this.getInventory(HogService.buildGetItemInbag());
+            const {Item_1, Item_2, Item_1_amount, Item_2_amount} = selectedProcess;
+            const countItem1: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_1).length;
+            const countItem2: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_2).length;
+
+            // do process
+            const processSize = factoryMaxSize - processInProgress.length
+            logInfo(`Proceed available: (${pigPrepared.length})  process ->  (${processSize})`)
+            const grouped = groupBy(pigPrepared, 'Pig_id')
+            const keys = Object.keys(grouped);
+
+            for (let i = 0; i < processSize; i++) {
+                const picGroupList = grouped[keys[i]]
+                if (Item_1 && picGroupList.length * Item_1_amount > countItem1) {
+                    console.log('buy item 1')
+                    const bs1 = await this.doBuyItem(Item_1, (picGroupList.length * Item_1_amount) + 2, 3)
+                    bs1 && logSuccess('Successfully purchased hair part 1')
+                }
+
+                if (Item_2 && picGroupList.length * Item_2_amount > countItem2) {
+                    console.log('buy item 2')
+                    const bs2 = await this.doBuyItem(Item_2, (picGroupList.length * Item_2_amount) + 2, 3)
+                    bs2 && logSuccess('Successfully purchased hair part 2')
+                }
+                const {data} = await this.getProcessInProgress(HogService.buildDoProcess(selectedProcessId, picGroupList));
+                data && logSuccess(`Process success ProcessID:${selectedProcessId} hog amount:${picGroupList.length}`)
+            }
+        }
+    }
+    /**
+     * ให้อาหาร ให้น้ำ เก็บเหรียญ ซื้อเบอร์เกอร์ อาบน้ำหมู
+     */
     public doRaisePigs = async () => {
         if (!this.userId)
             throw Error('UserId not set.');
@@ -109,24 +307,6 @@ export class HogService {
         }
     }
 
-
-    private doReceiveItem() {
-        const time = dayjs();
-        if (time.hour() === 6 && time.minute() === 30) {
-            (async () => {
-                logInfo(`H ${time.hour()} M ${time.minute()} `)
-                try {
-                    const re = await this.receiveDailyItem();
-                    if (re) {
-                        logSuccess("receive item Successfully")
-                    }
-                } catch (e) {
-                    logError('Can\'t receive daily item');
-                }
-            })()
-        }
-    }
-
     public foodServeProcess = async () => {
         const {data: foodList} = await this.getInventory(HogService.buildFoodList())
         // if (!foodList.itemlist && await this.doBuyFood(HogService.BURGER_ID)) {
@@ -134,14 +314,14 @@ export class HogService {
         //     return;
         // }
 
-        const notFoundBurger = !foodList.itemlist.some(item => item.Itemid === HappyHogData.FOOD_BURGER_ID)
-        if (notFoundBurger && await this.doBuyFood(HappyHogData.FOOD_BURGER_ID)) {
+        const notFoundBurger = !foodList.itemlist.some(item => item.Itemid === HogData.FOOD_BURGER_ID)
+        if (notFoundBurger && await this.doBuyItem(HogData.FOOD_BURGER_ID, env.buy_amount)) {
             logSuccess("By Burger SUCCESS");
             return;
         }
 
 
-        const itemBurger = foodList.itemlist.find(item => item.Itemid === HappyHogData.FOOD_BURGER_ID)
+        const itemBurger = foodList.itemlist.find(item => item.Itemid === HogData.FOOD_BURGER_ID)
         if (!itemBurger) {
             logError("Not found burger")
             return;
@@ -154,12 +334,12 @@ export class HogService {
         return foodSuccess;
     };
 
-    public getMarket = async (jsonStr: string) => {
+    public getMarket = async (jsonStr?: string) => {
         const config = {
             url: `${env.end_point}/market/`,
             headers: this.buildHeader(),
         };
-        return axios.post<ResponseMarket>(config.url, jsonStr, {
+        return axios.post<ResponseMarket>(config.url, jsonStr || HogService.buildMargetList(), {
             headers: config.headers
         })
     };
@@ -187,6 +367,21 @@ export class HogService {
         })
     };
 
+    public getBalance = async () => {
+        const config = {
+            url: `${env.end_point}/balance/`,
+            headers: this.buildHeader(),
+        };
+        return axios.post<BalanceResponse>(config.url, '', {
+            headers: config.headers
+        })
+    };
+
+    public getCoinBalance = async () => {
+        const {data: {User}} = await this.getBalance();
+        return User;
+    };
+
     public useItem = async (jsonStr: any) => {
         const config = {
             url: `${env.end_point}/useitems/`,
@@ -197,49 +392,21 @@ export class HogService {
         })
     };
 
-    public static buildItemWater() {
-        return qs.stringify({
-            type: 2
-        });
-    }
-
-    public static buildItemShower() {
-        return qs.stringify({
-            type: 3
-        });
-    }
-
-    public static buildItemUse(invid: number) {
-        return qs.stringify({
-            type: 1,
-            invid
-        });
-    }
-
-
-    public static buildFoodList() {
-        return qs.stringify({
-            itemtypelist: "{\"TypeList\":[0]}"
-        });
-    }
-
-
-    public async doBuyFood(itemID: number) {
-        const {data: marketResponse} = await this.getMarket(HogService.buildMargetList())
-        const burgerItem = marketResponse.marketlist.find(item => item.ItemId === itemID)
+    public async doBuyItem(itemID: number, amount: number, itemType?: number) {
+        const {data: marketResponse} = await this.getMarket();
+        const itemSelected = itemType ? marketResponse.marketlist.find(item => {
+            return item.ItemId === itemID && item.Itemtype == itemType;
+        }) : marketResponse.marketlist.find(item => {
+            return item.ItemId === itemID
+        })
         // const burgerItem = HogService.findMaxId(itemSlot2);
-        if (!burgerItem) {
-            throw Error('burger item not found.');
+        if (!itemSelected) {
+            throw Error(`item not found ID -> ${itemID}`);
         }
-        const {data: buyResponse} = await this.getMarket(HogService.buildBurger(env.buy_amount, burgerItem.StoreId))
+        const body = HogService.buildBuyItem(amount, itemSelected.StoreId)
+        logInfo(`buy item ${body}`)
+        const {data: buyResponse} = await this.getMarket(body)
         return buyResponse;
-    }
-
-    public static findMaxId(itemList: Marketlist[]): Marketlist | undefined {
-        const storeId = Math.max.apply(Math, itemList.map(function (o) {
-            return o.StoreId;
-        }))
-        return itemList.find(i => i.StoreId === storeId);
     }
 
     public doGenerateToken = async () => {
@@ -272,6 +439,23 @@ export class HogService {
         }
     };
 
+    private doReceiveItem() {
+        const time = dayjs();
+        if (time.hour() === 6 && time.minute() === 30) {
+            (async () => {
+                logInfo(`H ${time.hour()} M ${time.minute()} `)
+                try {
+                    const re = await this.receiveDailyItem();
+                    if (re.status === 200) {
+                        logSuccess("receive item Successfully")
+                    }
+                } catch (e) {
+                    logError('Can\'t receive daily item');
+                }
+            })()
+        }
+    }
+
     private doGetCookie = async (accesstoken: string) => {
         const jsonData = qs.stringify({
             accesstoken,
@@ -287,25 +471,6 @@ export class HogService {
             headers: {}
         });
     };
-
-    public static buildBurger(burgerAmount: number, storeId: number) {
-        return qs.stringify({
-            type: 2,
-            storeId,
-            amount: burgerAmount,
-            buytype: 2
-        })
-    }
-
-    private static buildData(data: Object) {
-        return qs.stringify(data)
-    }
-
-    static buildMargetList() {
-        return qs.stringify({
-            type: 1
-        })
-    }
 
     private buildHeader() {
         return {

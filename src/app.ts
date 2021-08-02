@@ -1,12 +1,20 @@
 import {HogService} from "./services/hog.service";
 import cron from 'node-cron'
-import {logError, logSuccess, logWarn} from "./Utils/log";
+import {groupBy, logError, logInfo, logSuccess, logWarn} from "./Utils/log";
 import {env} from "./config/env.config";
+import {hogRare} from "./config/hog.config";
+import {HogData} from "./config/hog.data";
+import {ProcessAvailable} from "./models/response.model";
 
 
 let hog = new HogService();
 (async () => {
-    await hog.doLogin();
+    try{
+        await hog.doLogin();
+    }catch (e){
+        logError("Token is invalid")
+        throw new Error('Token is invalid');
+    }
 })();
 console.log('cron -> ', env.cron)
 cron.schedule(env.cron, async () => {
@@ -21,8 +29,9 @@ cron.schedule(env.cron, async () => {
         if (hog.isUndefinedToken) {
             await renewToken();
         }
-        await hog.doRaisePigs();
-
+        await hog.doRaisePigs()
+        // await hog.pigProceed();
+        // const find = farmInfo.pigs_list.find(pig=>pig.Pig_sex === 1 && pig.Pig_size === 1); // แม่พันธ์
 
     } catch (e) {
 

@@ -1,3 +1,5 @@
+import exp from "constants";
+
 export interface Factoryup {
     end: number;
     start: number;
@@ -117,3 +119,56 @@ export interface UserInfoResponse {
     userid: string;
     wheels: number;
 }
+
+export interface ProcessAvailable {
+    Id: number;
+    Pigid: number;
+    Item_1: number;
+    Item_2: number;
+    Itemidresult: number;
+    Item_1_amount: number;
+    Item_2_amount: number;
+    Pig_price: number;
+    Process_time: number;
+    Process_exp: number;
+    Level: number;
+}
+
+export interface Exp {
+    exp: number;
+    level: number;
+    maxexp: number;
+}
+
+export interface User {
+    coins: number;
+    gems: number;
+    point: number;
+}
+
+export interface BalanceResponse {
+    Exp: Exp;
+    MailBoxCount: number;
+    MailCount: number;
+    User: User;
+}
+
+export interface ProcessInProcess {
+    Id: number;
+    Itemid: number;
+    Amount: number;
+    Coin: number;
+    Skipprice: number;
+    Create: number;
+    Now: number;
+    End: number;
+}
+
+export interface ProcessAvailableResponse {
+    List: ProcessAvailable[]
+}
+
+export interface ProcessInProcessResponse {
+    List: ProcessInProcess[]
+}
+
