@@ -42,7 +42,7 @@ cron.schedule(env.cron, async () => {
 
     } catch (e) {
 
-        if (e.statusCode == 401) {
+        if (e.statusCode === 401) {
             logError(`Facebook token is invalid -> ${e.statusCode}`)
         } else if (e.statusCode != 200) {
             logError(`Something went wrong ->  ${e}`)
