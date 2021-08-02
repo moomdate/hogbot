@@ -30,12 +30,12 @@ cron.schedule(env.cron, async () => {
         if (hog.isUndefinedToken) {
             await renewToken();
         }
+        const time = dayjs(new Date());
         const {data: farmInfo} = await hog.getFarmInfo(hog.getUserId);
-        const dayjsTime = dayjs();
         if (env.raise) {
             await hog.doRaisePigs(farmInfo)
         }
-        if (env.processed) {
+        if (env.processed && time.minute() % 5 === 0) {
             await hog.pigProceed(farmInfo);
         }
         // const find = farmInfo.pigs_list.find(pig=>pig.Pig_sex === 1 && pig.Pig_size === 1); // แม่พันธ์

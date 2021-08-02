@@ -189,9 +189,18 @@ export class HogService {
     public pigProceed = async (farmInfo: FarmInfoModel) => {
 
         logInfo("Process 2 Work")
+        const {data: responseProcessObj} = await this.getProcessInProgress()
+        const {List: processInProgress} = responseProcessObj
+
+        const endProcessList = processInProgress.filter(pc => pc.Now > pc.End);
+        if (endProcessList.length) {
+            await this.doneProcessInProgress(endProcessList);
+            return;
+        }
+
         const pigNotRare = farmInfo.pigs_list.filter(pig => !hogRare.includes(pig.Pig_id));
         if (!pigNotRare.length) {
-            logInfo("Pig is rare all")
+            logInfo("All rare pigs")
             return;
         }
 
@@ -204,22 +213,13 @@ export class HogService {
             return;
         }
 
-        const factoryMaxSize = HogData.factoryMaxSize(farmInfo.factory);
-        const {data: responseProcessObj} = await this.getProcessInProgress()
-        const {List: processInProgress} = responseProcessObj
-
-        const endProcessList = processInProgress.filter(pc => pc.Now > pc.End);
-        if (endProcessList.length) {
-            await this.doneProcessInProgress(endProcessList);
-            return;
-        }
-
         const {data: processAvailableResp} = await this.getProcess()
         const {List: processAvailable} = processAvailableResp;
 
         logInfo(`Process in progress -> (${processInProgress.filter(r => !endProcessList.includes(r)).length})`)
+        const factoryMaxSize = HogData.factoryMaxSize(farmInfo.factory);
         if (processInProgress.length === factoryMaxSize) {
-            logWarn("Factory process is full");
+            logWarn("The factory process is full.");
             return;
         }
 
@@ -227,7 +227,7 @@ export class HogService {
         const selectedProcessId = Math.max.apply(Math, processLevel.map((o) => o.Id))
         const selectedProcess = processLevel.find(p => p.Id === selectedProcessId);
         if (!selectedProcess) {
-            logError('ไม่สามารถเลือกโรงแปรรูปได้')
+            logError('Unable to select a processing style.')
             return;
         }
 
@@ -238,38 +238,37 @@ export class HogService {
 
         // do process
         const processSize = factoryMaxSize - processInProgress.length
-        logInfo(`Proceed available: (${pigPrepared.length})  process ->  (${processSize})`)
+        logInfo(`Available processing: (${pigPrepared.length})  do a number of processing: (${processSize})`)
         const grouped = groupBy(pigPrepared, 'Pig_id')
         const keys = Object.keys(grouped);
 
         for (let i = 0; i < processSize; i++) {
             const picGroupList = grouped[keys[i]]
             if (Item_1 && picGroupList.length * Item_1_amount > countItem1) {
-                logInfo('Buy item 1')
+                logInfo('Purchasing an item 1')
                 const bs1 = await this.doBuyItem(Item_1, (picGroupList.length * Item_1_amount) + 2, 3)
-                bs1 && logSuccess('Successfully purchased hair part 1')
+                bs1 && logSuccess('Successfully purchased 1 ingredient.')
             }
 
             if (Item_2 && picGroupList.length * Item_2_amount > countItem2) {
                 logInfo('Buy item 2')
                 const bs2 = await this.doBuyItem(Item_2, (picGroupList.length * Item_2_amount) + 2, 3)
-                bs2 && logSuccess('Successfully purchased hair part 2')
+                bs2 && logSuccess('Successfully purchased 2 ingredient.')
             }
             const {status} = await this.getProcessInProgress(HogService.buildDoProcess(selectedProcessId, picGroupList));
             if (status === 200) {
-                logSuccess(`Process success ProcessID:${selectedProcessId} hog proceed amount:${picGroupList.length}`)
+                logSuccess(`Enter the process -> ProcessID:${selectedProcessId} , number of pigs processed:${picGroupList.length}`)
             }
         }
 
     }
 
     private async doneProcessInProgress(endProcessList: any) {
-        logInfo(`process done -> (${endProcessList.length})`)
+        logInfo(`Process done -> (${endProcessList.length})`)
         for (let process of endProcessList) {
-            console.log(`processID-> ${process.Id}`)
             const {status} = await this.getProcessInProgress(HogService.buildProcessSuccess(process.Id))
             if (status === 200) {
-                logSuccess(`Done process id -> ${process.Id} SUCCESS `)
+                logSuccess(`the process is finished  ID -> ${process.Id} `)
             }
         }
     }
