@@ -231,7 +231,7 @@ export class HogService {
             logError('Unable to select a processing style.')
             return;
         }
-
+        logInfo("Use process id -> ", selectedProcess.Id + '')
         const {data: itemInBag} = await this.getInventory(HogService.buildGetItemInBag());
         const {Item_1, Item_2, Item_1_amount, Item_2_amount} = selectedProcess;
         const countItem1: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_1).length;
@@ -239,20 +239,20 @@ export class HogService {
 
         // do process
         const processSize = factoryMaxSize - processInProgress.length
-        logInfo(`Available processing: (${pigPrepared.length})  do a number of processing: (${processSize})`)
+        logInfo(`Available processing: (${processSize})  do a number of processing: (${pigPrepared.length})`)
         const grouped = groupBy(pigPrepared, 'Pig_id')
         const keys = Object.keys(grouped);
 
         for (let i = 0; i < processSize; i++) {
             const picGroupList = grouped[keys[i]]
             if (Item_1 && picGroupList.length * Item_1_amount > countItem1) {
-                logInfo('Purchasing an item 1')
+                logInfo('Purchasing an item 1 -> ID:', Item_1 + '')
                 const bs1 = await this.doBuyItem(Item_1, (picGroupList.length * Item_1_amount) + 2, 3)
                 bs1 && logSuccess('Successfully purchased 1 ingredient.')
             }
 
             if (Item_2 && picGroupList.length * Item_2_amount > countItem2) {
-                logInfo('Buy item 2')
+                logInfo('Buy item 2 -> ID:', Item_2 + '')
                 const bs2 = await this.doBuyItem(Item_2, (picGroupList.length * Item_2_amount) + 2, 3)
                 bs2 && logSuccess('Successfully purchased 2 ingredient.')
             }
