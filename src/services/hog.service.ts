@@ -65,7 +65,7 @@ export class HogService {
         });
     }
 
-    public static buildGetItemInbag() {
+    public static buildGetItemInBag() {
         return qs.stringify({
             itemtypelist: "{\"TypeList\":[0,1,2,3,4,5]}"
         });
@@ -223,7 +223,8 @@ export class HogService {
             return;
         }
 
-        const processLevel = processAvailable.filter(p => p.Level === farmInfo.factory)
+        const factoryLevel = farmInfo.factory > 3 ? 3 : farmInfo.factory;
+        const processLevel = processAvailable.filter(p => p.Level === factoryLevel)
         const selectedProcessId = Math.max.apply(Math, processLevel.map((o) => o.Id))
         const selectedProcess = processLevel.find(p => p.Id === selectedProcessId);
         if (!selectedProcess) {
@@ -231,7 +232,7 @@ export class HogService {
             return;
         }
 
-        const {data: itemInBag} = await this.getInventory(HogService.buildGetItemInbag());
+        const {data: itemInBag} = await this.getInventory(HogService.buildGetItemInBag());
         const {Item_1, Item_2, Item_1_amount, Item_2_amount} = selectedProcess;
         const countItem1: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_1).length;
         const countItem2: number = itemInBag.itemlist.filter(i => i.Itemid === selectedProcess.Item_2).length;
