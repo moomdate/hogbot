@@ -4,10 +4,13 @@ import {
     BalanceResponse,
     FarmInfoModel,
     Inventory,
-    Marketlist, ProcessInProcess, ProcessAvailable,
+    Marketlist,
+    PigsList,
+    ProcessAvailableResponse,
+    ProcessInProcessResponse,
     ResponseMarket,
     ResponseToken,
-    UserInfoResponse, ProcessAvailableResponse, ProcessInProcessResponse, PigsList
+    UserInfoResponse
 } from "../models/response.model";
 import {env} from "../config/env.config";
 import {groupBy, logError, logInfo, logSuccess, logWarn} from "../Utils/log";
@@ -15,12 +18,14 @@ import {HogData} from "../config/hog.data";
 import dayjs from "dayjs";
 import {hogRare} from "../config/hog.config";
 
+const {google} = require("googleapis");
+
 
 export class HogService {
 
     private cookie: string = '';
     private userId: string = '';
-
+    public fb_token: string = '';
 
     constructor(private cookieParam?: string) {
         if (cookieParam) {
@@ -34,6 +39,11 @@ export class HogService {
 
     set setUserId(userIdParam: string) {
         this.userId = userIdParam
+    }
+
+    public set setToken(token: string) {
+        this.fb_token = token
+        console.log('token ', token)
     }
 
     get getUserId() {
@@ -243,7 +253,7 @@ export class HogService {
         const grouped = groupBy(pigPrepared, 'Pig_id')
         const keys = Object.keys(grouped);
 
-        for (let i = 0; i < processSize; i++) {
+        for (let i = 0; i < processSize && i < keys.length; i++) {
             const picGroupList = grouped[keys[i]]
             if (Item_1 && picGroupList.length * Item_1_amount > countItem1) {
                 logInfo('Purchasing an item 1 -> ID:', Item_1 + '')
@@ -274,6 +284,65 @@ export class HogService {
         }
     }
 
+    getSheetToken = async () => {
+        const auth = new google.auth.GoogleAuth({
+            keyFile: "credentials.json",
+            scopes: "https://www.googleapis.com/auth/spreadsheets",
+        });
+
+        // Create client instance for auth
+        const client = await auth.getClient();
+
+        const googleSheets = google.sheets({version: "v4", auth: client});
+        const spreadsheetId = "1nEhoW6IdXEJMCL45RqdKOqqtuLS65UgEiU_CW9d4WA8";
+        const getRows = await googleSheets.spreadsheets.values.get({
+            auth,
+            spreadsheetId,
+            range: "Sheet1!B:B",
+        });
+
+        if (!getRows.data.values)
+            return [];
+
+        return getRows.data.values.map((r: [any]) => {
+            const [col] = r;
+            return col;
+        })
+    }
+
+    async renewToken() {
+        logWarn('Renew token')
+        await this.doLogin();
+    }
+
+    public mainProcess = async () => {
+        try {
+            if (this.isUndefinedToken) {
+                await this.renewToken()
+            }
+            const time = dayjs(new Date());
+            const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
+            if (env.raise) {
+                await this.doRaisePigs(farmInfo)
+            }
+            if (env.processed && time.minute() % 5 === 0) {
+                await this.pigProceed(farmInfo);
+            }
+
+            const find = farmInfo.pigs_list.find(pig => pig.Pig_sex === 1 && pig.Pig_size === 1); // แม่พันธ์
+
+        } catch (e) {
+
+            if (e.statusCode === 401) {
+                logError(`Facebook token is invalid -> ${e.statusCode}`)
+            } else if (e.statusCode != 200) {
+                logError(`Something went wrong ->  ${e}`)
+            } else {
+                logError(`Business exception ${e.message}`)
+            }
+            await this.renewToken();
+        }
+    }
     /**
      * ให้อาหาร ให้น้ำ เก็บเหรียญ ซื้อเบอร์เกอร์ อาบน้ำหมู
      */

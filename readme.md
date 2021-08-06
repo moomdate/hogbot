@@ -24,8 +24,10 @@
 
 ## How to config `.env` file
 
-```shell
-facebook_token=facebook token
-buy_amount=จำนวนไอเท็มที่จะซื้อ
-cron=cron default 1 นาที '* * * * *'
-```
+| variable        | require  | default    | description                                     |   |
+|-----------------|----------|------------|-------------------------------------------------|---|
+| facebook_token  | &#x2611; | undefined  | facebook token                                  |   |
+| cron            | &#x2612; | * * * * *  | ตั้งเวลารัน                                        |   |
+| processed       | &#x2612; | false      | แปรรูปหมูอัติโนมัติ เหมือน้ำหนักถึงเกณฑ์ที่ตั้งไว้ (ยกเว้นหมูแรร์) |   |
+| raise           | &#x2612; | true       | เลี้ยงหมูอัตโนมัติ (ให้อาหาร, ให้น้ำ, อาบน้ำ, เก็บเหรียญ)   |   |
+| weightToProcess | &#x2612; | 200        | นำ้หนักหมูพร้อมแปรรูป                                |   |
