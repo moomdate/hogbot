@@ -8,7 +8,7 @@ export class HogData {
     public static readonly RENG_POWER = 10; // เร่งพลัง
     public static readonly RENG_CROD = 11; // เร่งคลอด
     public static readonly RENG_TO = 26; // เร่่งโต
-
+    public static readonly FOOD_SUPPLEMENT = 27; // อาหารเสริม
     public static readonly BACK_PEPPER = 16; // เริกไทย
     public static readonly JUJUBE = 18; // พุทราจีน
     public static readonly SALT = 19; // เกลือ

@@ -320,12 +320,11 @@ export class HogService {
             if (this.isUndefinedToken) {
                 await this.renewToken()
             }
-            const time = dayjs(new Date());
             const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
             if (env.raise) {
                 await this.doRaisePigs(farmInfo)
             }
-            if (env.processed && time.minute() % 5 === 0) {
+            if (env.processed) {
                 await this.pigProceed(farmInfo);
             }
 
@@ -352,6 +351,10 @@ export class HogService {
         const pigIsThirsty = farmInfo.pigs_list.some(pig => pig.Pig_water);
         const pigIsDirty = farmInfo.fly;
         const haveItemDrop = !!farmInfo.itemdrops_list.length;
+
+
+        await this.useSupplementFood();
+
 
         this.doReceiveItem();
         if (pigIsHungry) {
@@ -380,20 +383,26 @@ export class HogService {
             }
         }
     }
+    public useSupplementFood = async () => {
+        const {data: foodList} = await this.getInventory(HogService.buildFoodList())
 
+        const foodSupplement = foodList.itemlist.find(item => item.Itemid === HogData.FOOD_SUPPLEMENT)
+        if (!foodSupplement)
+            return;
+
+        const foodSuccess = await this.useItem(HogService.buildItemUse(foodSupplement.InventoryId))
+        if (foodSuccess) {
+            logSuccess("Already fed Food Supplement")
+        }
+    }
     public foodServeProcess = async () => {
         const {data: foodList} = await this.getInventory(HogService.buildFoodList())
-        // if (!foodList.itemlist && await this.doBuyFood(HogService.BURGER_ID)) {
-        //     logSuccess("By food SUCCESS")
-        //     return;
-        // }
 
         const notFoundBurger = !foodList.itemlist.some(item => item.Itemid === HogData.FOOD_BURGER_ID)
         if (notFoundBurger && await this.doBuyItem(HogData.FOOD_BURGER_ID, env.buy_amount)) {
             logSuccess("By Burger SUCCESS");
             return;
         }
-
 
         const itemBurger = foodList.itemlist.find(item => item.Itemid === HogData.FOOD_BURGER_ID)
         if (!itemBurger) {
