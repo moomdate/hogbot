@@ -501,7 +501,7 @@ export class HogService {
             logintype: 1,
             logintoken: env.facebook_token,
             device: 'APPLE',
-            version: '2.0.5'
+            version: '2.1.0'
         })
         const config = {
             url: `${env.end_point}/register/`,
