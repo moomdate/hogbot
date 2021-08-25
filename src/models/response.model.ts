@@ -54,6 +54,10 @@ export interface ResponseToken {
     AccessToken: string;
 }
 
+export interface ResponseFarmPage {
+    status: number;
+}
+
 export interface Marketlist {
     StoreId: number;
     ItemId: number;
@@ -172,3 +176,62 @@ export interface ProcessInProcessResponse {
     List: ProcessInProcess[]
 }
 
+export interface TokenConfig {
+    tokenId?: string;
+    autoRaise: boolean;
+    autoProcessed: boolean;
+    useFoodSupplement: boolean;
+    enabled: boolean;
+    weight: number;
+    processedExcept: boolean;
+    processedHogList: HogModel[]
+}
+
+export interface TokenResponse {
+    _id: string;
+    token: string;
+    config: TokenConfig;
+    user: string;
+}
+
+export interface HogModel {
+    id: number;
+    name: string;
+}
+
+export interface MatingResponse {
+    List: HogMale[]
+}
+
+export interface HogMale {
+    FbName: string;
+    Id: number;
+    Pigid: number;
+    Sex: number;
+    Price: number;
+}
+
+export interface SimpleResponse {
+    Coin: number;
+}
+
+export interface SellPigResponse {
+    success: boolean;
+    rarePig: boolean
+    pigId?: number;
+}
+
+export interface hogBreedResponse {
+    success: boolean;
+    notFoundMom?: boolean,
+    stallIsFull?: boolean;
+    notFoundDad?: boolean,
+    isNotBalanceDad?: boolean;
+    isPregnant?: boolean;
+}
+
+export interface PrepareFarm {
+    farmIsFull: boolean;
+    notEnoughMoney?: boolean;
+    farm2NotFound?: boolean;
+}

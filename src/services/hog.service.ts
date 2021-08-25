@@ -2,30 +2,30 @@ import axios from 'axios';
 import qs from 'qs';
 import {
     BalanceResponse,
-    FarmInfoModel,
+    FarmInfoModel, hogBreedResponse,
     Inventory,
-    Marketlist,
-    PigsList,
+    Marketlist, MatingResponse,
+    PigsList, PrepareFarm,
     ProcessAvailableResponse,
-    ProcessInProcessResponse,
+    ProcessInProcessResponse, ResponseFarmPage,
     ResponseMarket,
-    ResponseToken,
+    ResponseToken, SellPigResponse, SimpleResponse, TokenConfig, TokenResponse,
     UserInfoResponse
 } from "../models/response.model";
 import {env} from "../config/env.config";
 import {groupBy, logError, logInfo, logSuccess, logWarn} from "../Utils/log";
 import {HogData} from "../config/hog.data";
 import dayjs from "dayjs";
-import {hogRare} from "../config/hog.config";
+import {hogList, hogNotRare} from "../config/hog.config";
 
 const {google} = require("googleapis");
 
 
 export class HogService {
 
+    public fb_token: string = '';
     private cookie: string = '';
     private userId: string = '';
-    public fb_token: string = '';
 
     constructor(private cookieParam?: string) {
         if (cookieParam) {
@@ -69,6 +69,14 @@ export class HogService {
         });
     }
 
+    public static buildItemUseForHog(invid: number, idpig: number) {
+        return qs.stringify({
+            type: 1,
+            invid,
+            idpig
+        });
+    }
+
     public static buildFoodList() {
         return qs.stringify({
             itemtypelist: "{\"TypeList\":[0]}"
@@ -80,6 +88,14 @@ export class HogService {
             itemtypelist: "{\"TypeList\":[0,1,2,3,4,5]}"
         });
     }
+
+    // item ที่ใช้ได้กับหมู 1:1
+    public static buildGetItemForHog() {
+        return qs.stringify({
+            itemtypelist: "itemtypelist: {\"TypeList\":[1]}"
+        });
+    }
+
 
     public static findMaxId(itemList: Marketlist[]): Marketlist | undefined {
         const storeId = Math.max.apply(Math, itemList.map(function (o) {
@@ -103,6 +119,58 @@ export class HogService {
         })
     }
 
+    public static buildProcessInProcess() {
+        return qs.stringify({
+            type: 3
+        })
+    }
+
+    public static buildProcessAvailable() {
+        return qs.stringify({
+            type: 1
+        })
+    }
+
+    public static buildProcessSuccess(id: number) {
+        return qs.stringify({
+            type: 4,
+            Id: id
+        })
+    }
+
+    public static buildDoProcess(processId: number, pigList: PigsList[]) {
+        return qs.stringify({
+            type: 2,
+            Id: processId,
+            ListIdPig: `{"PigList":[${pigList.map(p => p.Id).join(',')}]`
+        }) + '%7D'
+    }
+
+    public static buildSellPic(pigList: PigsList[]) {
+        return qs.stringify({
+            type: 2,
+            piglist: `{"PigList":[${pigList.map(p => p.Id).join(',')}]`
+        }) + '%7D'
+    }
+
+    public static buildMatingList() {
+        return qs.stringify({
+            type: 1,
+            pigid: -1
+        });
+    }
+
+    /*
+    ผสมพันธ์
+     */
+    public static buildMating(femaleId: number, maleId: number) {
+        return qs.stringify({
+            type: 2,
+            idpigfemale: femaleId,
+            idpigmale: maleId,
+        });
+    }
+
     private static buildData(data: Object) {
         return qs.stringify(data)
     }
@@ -119,6 +187,25 @@ export class HogService {
             headers: config.headers
         })
     };
+
+    public getFarmPage = async (page?: number) => {
+        const param = HogService.buildData({
+            type: 1,
+            pageid: page ? page : 0
+        })
+        const config = {
+            url: `${env.end_point}/farmpage/`,
+            headers: this.buildHeader(),
+        };
+        const {headers, data} = await axios.post<ResponseFarmPage>(config.url, param, {
+            headers: config.headers
+        })
+        const [cookie] = headers['set-cookie'];
+        this.cookie = cookie;
+        return data;
+    };
+
+    //{"PigList":[21819550]}
 
     public takeAllCoin = async () => {
         const data = qs.stringify({
@@ -156,36 +243,6 @@ export class HogService {
         })
     };
 
-    public static buildProcessInProcess() {
-        return qs.stringify({
-            type: 3
-        })
-    }
-
-    public static buildProcessAvailable() {
-        return qs.stringify({
-            type: 1
-        })
-    }
-
-    public static buildProcessSuccess(id: number) {
-        return qs.stringify({
-            type: 4,
-            Id: id
-        })
-    }
-
-    public static buildDoProcess(processId: number, pigList: PigsList[]) {
-        return qs.stringify({
-            type: 2,
-            Id: processId,
-            ListIdPig: `{"PigList":[${pigList.map(p => p.Id).join(',')}]`
-        }) + '%7D'
-    }
-
-    //{"PigList":[21819550]}
-
-
     public userInfo = async () => {
         const config = {
             url: `${env.end_point}/userinfo`,
@@ -196,7 +253,7 @@ export class HogService {
         })
     };
 
-    public pigProceed = async (farmInfo: FarmInfoModel) => {
+    public pigProceed = async (farmInfo: FarmInfoModel, config: TokenConfig) => {
 
         logInfo("Process 2 Work")
         const {data: responseProcessObj} = await this.getProcessInProgress()
@@ -208,7 +265,9 @@ export class HogService {
             return;
         }
 
-        const pigNotRare = farmInfo.pigs_list.filter(pig => !hogRare.includes(pig.Pig_id));
+        const pigNotRare = config.processedExcept ?
+            farmInfo.pigs_list.filter(pig => !config.processedHogList.map(m => m.id).includes(pig.Pig_id)) :
+            farmInfo.pigs_list.filter(pig => config.processedHogList.map(m => m.id).includes(pig.Pig_id));
         if (!pigNotRare.length) {
             logInfo("All rare pigs")
             return;
@@ -274,16 +333,6 @@ export class HogService {
 
     }
 
-    private async doneProcessInProgress(endProcessList: any) {
-        logInfo(`Process done -> (${endProcessList.length})`)
-        for (let process of endProcessList) {
-            const {status} = await this.getProcessInProgress(HogService.buildProcessSuccess(process.Id))
-            if (status === 200) {
-                logSuccess(`the process is finished  ID -> ${process.Id} `)
-            }
-        }
-    }
-
     getSheetToken = async () => {
         const auth = new google.auth.GoogleAuth({
             keyFile: "credentials.json",
@@ -315,20 +364,20 @@ export class HogService {
         await this.doLogin();
     }
 
-    public mainProcess = async () => {
+    public mainProcess = async (config: TokenConfig) => {
         try {
             if (this.isUndefinedToken) {
                 await this.renewToken()
             }
             const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
-            if (env.raise) {
-                await this.doRaisePigs(farmInfo)
+            if (config.autoRaise) {
+                await this.doRaisePigs(farmInfo, config)
             }
-            if (env.processed) {
-                await this.pigProceed(farmInfo);
+            if (config.autoProcessed) {
+                await this.pigProceed(farmInfo, config);
             }
 
-            const find = farmInfo.pigs_list.find(pig => pig.Pig_sex === 1 && pig.Pig_size === 1); // แม่พันธ์
+            // const find = farmInfo.pigs_list.find(pig => pig.Pig_sex === 1 && pig.Pig_size === 1); // แม่พันธ์
 
         } catch (e) {
 
@@ -342,18 +391,20 @@ export class HogService {
             await this.renewToken();
         }
     }
+
     /**
      * ให้อาหาร ให้น้ำ เก็บเหรียญ ซื้อเบอร์เกอร์ อาบน้ำหมู
      */
-    public doRaisePigs = async (farmInfo: FarmInfoModel) => {
+    public doRaisePigs = async (farmInfo: FarmInfoModel, config: TokenConfig) => {
         logInfo("Process 1 Work")
         const pigIsHungry = farmInfo.pigs_list.some(pig => pig.Pig_food);
         const pigIsThirsty = farmInfo.pigs_list.some(pig => pig.Pig_water);
         const pigIsDirty = farmInfo.fly;
         const haveItemDrop = !!farmInfo.itemdrops_list.length;
 
-
-        await this.useSupplementFood();
+        if (config.useFoodSupplement) {
+            await this.useSupplementFood();
+        }
 
 
         this.doReceiveItem();
@@ -383,6 +434,7 @@ export class HogService {
             }
         }
     }
+
     public useSupplementFood = async () => {
         const {data: foodList} = await this.getInventory(HogService.buildFoodList())
 
@@ -395,6 +447,7 @@ export class HogService {
             logSuccess("Already fed Food Supplement")
         }
     }
+
     public foodServeProcess = async () => {
         const {data: foodList} = await this.getInventory(HogService.buildFoodList())
 
@@ -423,6 +476,92 @@ export class HogService {
             headers: this.buildHeader(),
         };
         return axios.post<ResponseMarket>(config.url, jsonStr || HogService.buildMargetList(), {
+            headers: config.headers
+        })
+    };
+
+    public speedUpBreed = async () => {
+        const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
+        const hogPregnant = farmInfo.pigs_list.find(pig => pig.Pig_sex === 1 && pig.Pig_size === 1 && pig.Pig_pregnant === 1);
+        if (!hogPregnant) {
+            return;
+        }
+
+        const {data: itemList} = await this.getInventory(HogService.buildGetItemInBag())
+        const notFoundBurger = !itemList.itemlist.some(item => item.Itemid === HogData.RENG_CROD)
+        if (notFoundBurger && await this.doBuyItem(HogData.RENG_CROD, 30)) {
+            logSuccess("By itemSpeedBreed SUCCESS");
+            return;
+        }
+        const itemSpeedBreed = itemList.itemlist.find(item => item.Itemid === HogData.RENG_CROD)
+        if (!itemSpeedBreed) {
+            logError('not found speed breed item')
+            return;
+        }
+        const speedBreed = await this.useItem(HogService.buildItemUseForHog(itemSpeedBreed.InventoryId, hogPregnant.Id))
+        if (speedBreed) {
+            logSuccess('Breed speed up SUCCESS')
+        }
+    }
+
+
+    public sellChildPig = async (): Promise<SellPigResponse> => {
+        const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
+        // todo: not sell rare pig
+        const childPig = farmInfo.pigs_list.filter(pig => pig.Pig_size === 0); // && !(pig.Pig_id > 40 && pig.Pig_id < 71)
+        if (!childPig || childPig.length === 0) {
+            return {
+                success: false,
+                rarePig: false
+            }
+        }
+        if (childPig.some(p => !hogNotRare.includes(p.Pig_id))) {
+            return {
+                success: true,
+                rarePig: true,
+                pigId: childPig.find(p => p)?.Pig_id
+            }
+        }
+
+        const {data} = await this.sellPig(HogService.buildSellPic(childPig));
+        if (data) {
+            return {
+                success: true,
+                rarePig: false
+            }
+        }
+        return {
+            success: false,
+            rarePig: false
+        }
+    }
+
+
+    public doBreed = (): Promise<hogBreedResponse> =>
+        new Promise((resolve, reject) => {
+            this.doRequestBreed()
+                .then((data) => resolve(data))
+                .catch(e => resolve({
+                    success: false
+                }))
+        })
+
+    public getMating = async (jsonData?: string) => {
+        const config = {
+            url: `${env.end_point}/mating/`,
+            headers: this.buildHeader(),
+        };
+        return axios.post<MatingResponse>(config.url, jsonData ? jsonData : HogService.buildMatingList(), {
+            headers: config.headers
+        })
+    };
+
+    public sellPig = async (jsonData?: string) => {
+        const config = {
+            url: `${env.end_point}/sellpig/`,
+            headers: this.buildHeader(),
+        };
+        return axios.post<SimpleResponse>(config.url, jsonData, {
             headers: config.headers
         })
     };
@@ -499,15 +638,17 @@ export class HogService {
     public doGenerateToken = async () => {
         const jsonData = qs.stringify({
             logintype: 1,
-            logintoken: env.facebook_token,
-            device: 'APPLE',
-            version: '2.1.0'
+            logintoken: this.fb_token,
+            device: 'ANDROID',
+            version: '2.1.2'
         })
         const config = {
             url: `${env.end_point}/register/`,
         };
         const {data: {AccessToken}} = await axios.post<ResponseToken>(config.url, jsonData, {
-            headers: {}
+            headers: {
+                'User-Agent': 'HappyHogM/0 CFNetwork/1306 Darwin/21.0.0'
+            }
         });
         const {headers} = await this.doGetCookie(AccessToken);
         const [cookie] = headers['set-cookie'];
@@ -525,6 +666,170 @@ export class HogService {
             throw Error('Not found user info');
         }
     };
+
+    public getTokenList = async () => {
+        const basic = Buffer.from("moomdate" + ":" + "a").toString('base64')
+        const config = {
+            url: `http://localhost:8080/api/token/all`,
+            headers: {
+                Authorization: 'Basic ' + basic,
+            },
+        };
+        return axios.get(config.url, {
+            headers: config.headers
+        });
+    }
+
+    doGetTokenList = (): Promise<TokenResponse[]> =>
+        new Promise((resolve, reject) => {
+            this.getTokenList()
+                .then(({data}) => resolve(data))
+                .catch(e => reject(e))
+        })
+
+    private async doneProcessInProgress(endProcessList: any) {
+        logInfo(`Process done -> (${endProcessList.length})`)
+        for (let process of endProcessList) {
+            const {status} = await this.getProcessInProgress(HogService.buildProcessSuccess(process.Id))
+            if (status === 200) {
+                logSuccess(`the process is finished  ID -> ${process.Id} `)
+            }
+        }
+    }
+
+    private doRequestBreed = async (): Promise<hogBreedResponse> => {
+        const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
+        const hogFemaleList = farmInfo.pigs_list.filter(pig => pig.Pig_sex === 1 && pig.Pig_size === 1);
+        if (hogFemaleList.length === 0) {
+            return {
+                notFoundMom: true,
+                isPregnant: false,
+                success: false
+            }
+        }
+        const hogMom = farmInfo.pigs_list.find(pig => pig.Pig_sex === 1 && pig.Pig_size === 1 && pig.Pig_pregnant === 0);
+        if (!hogMom) {
+            return {
+                notFoundMom: true,
+                isPregnant: true,
+                success: false
+            }
+        }
+        const {data: maleList} = await this.getMating();
+        const hogMale = maleList.List.find(a => a);
+        if (!hogMale) {
+            return {
+                isNotBalanceDad: true,
+                notFoundDad: true,
+                success: false
+            }
+        }
+        const {data} = await this.getMating(HogService.buildMating(hogMom.Id, hogMale.Id))
+        if (data) {
+            return {
+                notFoundMom: false,
+                notFoundDad: false,
+                success: true
+            }
+        }
+        return {
+            notFoundMom: false,
+            notFoundDad: false,
+            success: false
+        }
+    };
+
+    public prepareStall = async (page?: number): Promise<PrepareFarm> => {
+        const {data: farmInfo} = await this.getFarmInfo(this.getUserId);
+        if (page == 1 && farmInfo.farmpage2 != 1) {
+            return {
+                farm2NotFound: true,
+                farmIsFull: false
+            }
+        }
+        const hogMom = farmInfo.pigs_list.find(pig => pig.Pig_sex === 1 && pig.Pig_size === 1 && pig.Pig_pregnant === 0);
+        if (farmInfo.pigs_list.filter(p => p.Pig_size === 1).length < HogData.farmMaxSize(farmInfo.farm)) {
+            // console.log('free farm', HogData.farmMaxSize(farmInfo.farm) - farmInfo.pigs_list.length)
+            return {
+                farmIsFull: false
+            }
+        }
+        // console.log('limit', HogData.farmMaxSize(farmInfo.farm), farmInfo.pigs_list.filter(p => p.Pig_size === 1).length)
+        return {
+            farmIsFull: true
+        }
+
+
+    }
+
+
+    public breedCount = async (loop: number, page?: number) => new Promise(async (resolve, reject) => {
+        let i = 0;
+        let msg = 'ผสมพันธ์ครบรอบแล้ว'
+        let success = true;
+        console.log('init ', loop)
+        while (i < loop) {
+            try {
+
+                const prepareStall = await this.prepareStall(page);
+                if (prepareStall && prepareStall.farmIsFull) {
+                    msg = 'ฟาร์มเต็ม'
+                    success = false;
+                    break;
+                }
+                if (prepareStall.farm2NotFound) {
+                    msg = 'ไม่มีฟาร์ม2'
+                    success = false;
+                    break;
+                }
+                if (page && page != 0) {
+                    console.log('farm 2')
+                    const data = await this.getFarmPage(page);
+                }
+
+                const doBreed = await this.doBreed();
+                if (doBreed && doBreed.isNotBalanceDad) {
+                    msg = 'ไม่มีพ่อพันธ์'
+                    success = false;
+                    break;
+                }
+                if (doBreed && doBreed.notFoundMom && !doBreed.isPregnant) {
+                    msg = 'ไม่มีแม่พันธ์'
+                    success = false;
+                    break;
+                }
+                const promise2 = await this.speedUpBreed();
+                const promise3 = await this.sellChildPig();
+                if (promise3 && promise3.rarePig) {
+                    msg = 'พบหมูหายาก -> ' + hogList.find(p => p.id === promise3.pigId)?.name
+                    success = true;
+                    break;
+                }
+                if (doBreed) {
+                    i++;
+                }
+                if (i > (loop * 3)) {
+                    reject({
+                        success: success,
+                        msg: 'timeout',
+                        round: i
+                    })
+                }
+            } catch (e) {
+                resolve({
+                    success: success,
+                    msg: e.message,
+                    round: i
+                })
+                break;
+            }
+        }
+        resolve({
+            success: success,
+            msg,
+            round: i
+        })
+    })
 
     private doReceiveItem() {
         const time = dayjs();
@@ -562,7 +867,10 @@ export class HogService {
     private buildHeader() {
         return {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Cookie': this.cookie
+            'Cookie': this.cookie,
+            'User-Agent': 'HappyHogM/0 CFNetwork/1306 Darwin/21.0.0'
         };
     }
 }
+
+
